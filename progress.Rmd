@@ -1,0 +1,390 @@
+---
+title: "Progress"
+output: html_document
+---
+
+#Initialisation
+```{r echo=F, warning=F, error=F,message=F}
+#Preparation d'outil
+library(xtable)
+library(magrittr)
+library(wordcloud)
+#Live session ou on lit du disque?
+live=F
+```
+
+##Global Variables
+```{r echo=F}
+path <- 'raw_real/'
+N <- 20437560
+N_texts <- 1221
+node <- 12354
+```
+* Path to files: `r paste(path)`
+* Corpus size: `r paste(N)`
+* Number of texts in the corpus: `r paste(N_texts)`
+* Occurrences of node: `r paste(node)`
+
+##Preparation de fichiers
+
+1.La liste de fichiers dans le dossier `r paste(path)`  
+```{r echo=FALSE}
+files <- sapply(dir(path,pattern = "lemma"),function(x) paste("raw_real/", x, sep = ""))
+paste(paste(files[1:5],collapse=", "), '...')
+```
+
+2. Importation de fichiers dans les variables  
+```{r echo=FALSE}
+cooc_table <- list()
+cooc_table <- sapply(seq_along(files), function(i) as.data.frame(read.csv(files[i], sep="\t")) ) # read each file into a df and store it into a 'cooc_table' list
+names(cooc_table) <- sapply(seq_along(files), function(i) as.character( sub ("\\..+$","",names(files[i])) ) ) #name each df after file's name
+cooc_table <- lapply(cooc_table, function (tab) tab[order(tab$lemma),]) #order each table alphabetically 
+```
+
+##Coefficients
+
+1. Calculons et visualisons des correlations entre les rankings 
+
+```{r echo=F}
+cooc_red <- cooc_table
+cooc_red$subc_lemma_logRatio <- NULL
+cooc_red <- lapply(cooc_red, function(tab) tab <<- subset (tab, select=-No.) )
+coocs <- Reduce(function(x,y) merge (x, y,all=T), cooc_red)
+coocs$N <- rep(N,times=nrow(coocs)) # Add N-column
+coocs$N_texts <- rep(N_texts,times=nrow(coocs)) # Add N-texts-column
+coocs$node <- rep(node,times=nrow(coocs)) # Add node-columnnames(coocs) <- sub ("\\.value","",names(coocs))
+names(coocs)[names(coocs) %in% c("lemma","Total.no..in.this.subcorpus","Expected.collocate.frequency", "Observed.collocate.frequency", "In.no..of.texts" )] <- c("lemma","N_cooc","E_cooc","O_cooc","texts_cooc")
+names(coocs) <- sub ("\\.value","",names(coocs))
+ranks <- data.frame (lemma=coocs$lemma)
+ranks <- cbind(ranks, lapply(coocs[!(colnames(coocs) %in% c("lemma", "E_cooc","N","N_texts","node"))], function(x) rank(x,ties.method = "first")))
+ranks.binned <- cbind(lemma=ranks$lemma,ceiling(ranks[-1]/100) )
+#Matrix of correlation
+coocs.cor <- cor(coocs[,!(colnames(coocs) %in% c("lemma","N","N_texts","node"))])
+ranks.cor <- cor(ranks[,!(colnames(ranks) %in% c("lemma"))])
+ranks.binned.cor <- cor(ranks.binned[,!(colnames(ranks.binned) %in% c("lemma"))])
+library(corrplot)
+corrplot(coocs.cor,method="color", tl.col = "black",addCoef.col = "black", title="Correlation of coefficients")
+corrplot(ranks.cor,method="color", tl.col = "black",tl.pos = "t", addCoef.col = "black",type = "upper")
+corrplot(ranks.binned.cor,method="color",title = "Correlation of ranks (upper) and binned (lower) ranks",tl.col = "black",tl.pos = "l",addCoef.col = "black", type = "lower", add = T)
+#coocs <- Reduce(function(x,y) merge (x, y,by=c("lemma","Expected.collocate.frequency", "Total.no..in.this.subcorpus", "Observed.collocate.frequency", "In.no..of.texts" )), cooc_red)
+
+```
+
+2. Les differences entre les rankings
+
+```{r echo=FALSE}
+diffs <- list()
+diffs$ranks <- ranks.binned
+diffs$diffs$N_cooc <- list()
+diffs$diffs <- apply(ranks.binned[-1],1,function(x) lapply(x, function(y) y-x[1:length(x)]) )
+names(diffs$diffs) <- ranks.binned$lemma
+```
+
+##Distribution
+1. Preparation des donnees
+```{r echo=FALSE}
+distrib <- list()
+distrib$vols <- read.csv(file = "raw_real/distrib/distrib_volumes.csv", sep="\t",header = T)
+distrib$texts <- read.csv(file = "raw_real/distrib/distrib_textes.csv", sep="\t",header = T)
+allTexts <- read.csv(file="raw_real/distrib/textes.csv",header = T,sep = "\t")
+textsWithHits <- distrib$texts$Text #Find texts which had hits
+textsWithoutHits <- allTexts[!allTexts$id %in% textsWithHits,] #All texts - texts which had texts
+tmp <- as.data.frame(matrix(nrow = nrow(textsWithoutHits), ncol = ncol(distrib$texts)))#Create empty matrix to add to original data 
+names(tmp) <- names(distrib$texts)
+distrib$texts <- rbind(distrib$texts,tmp)
+#Enrich original hit table with no-hit-texts: 1) filenames 2) number of words 3) number of hits
+distrib$texts$Text <- as.factor ( c(as.character( distrib$texts$Text[1:length(textsWithHits)]),as.character(textsWithoutHits$id)) )
+distrib$texts$No..words.in.text <- c(distrib$texts$No..words.in.text[1:length(textsWithHits)],textsWithoutHits$tokens)
+distrib$texts$No..hits.in.text[is.na(distrib$texts$No..hits.in.text)] <- 0
+distrib$texts$Freq..per.million.words[is.na(distrib$texts$Freq..per.million.words)] <- 0
+distrib$texts <- merge(distrib$texts,allTexts[c("auteur","titre","id")],by.x="Text", by.y = "id")# Add metadata to original table
+distrib$vols$HitsToWords <- round ( (distrib$vols$Hits/distrib$vols$Words) * 1000000 , digits = 0 )
+distrib$texts$HitsToWords <- round( (distrib$texts$No..hits.in.text/distrib$texts$No..words.in.text) * 1000000 , digits = 0)
+distrib$texts$HitsToWords[is.na(distrib$texts$HitsToWords)] <- 0
+distrib_vols_meanPM <- round ( mean(distrib$vols$HitsToWords), digits=1 )
+distrib_texts_meanPM <- round( mean(distrib$texts$HitsToWords), digits = 1)
+
+```
+
+###Quelques statistiques
+
+Le moyen nombre des occurrences du mot 'liber':  
+* par volume: `r round(distrib_vols_meanPM)`  
+* par texte: `r round(distrib_texts_meanPM)`
+
+####Variation
+
+Le nombre des occurrences dans les volumes et les textes est varie:
+```{r echo=FALSE, warning= F}
+par(mfrow=c(1,2))
+boxplot(distrib$vols$HitsToWords,distrib$texts$HitsToWords,horizontal = T, names=c("volumes", "textes"))
+title(sub = "avec les outliers")
+boxplot(distrib$vols$HitsToWords,distrib$texts$HitsToWords,horizontal = T, names=c("volumes", "textes"),outline = F)
+title(sub = "sans les outliers")
+mtext(text = "Dispersion de frequence PPM",side=3, line=-2, outer = T, cex=1.2)
+```
+  
+L'inspection des boxplots montre que la frequence du mot est plus variee dans les textes que dans les volumes. Ce sont aussi des textes qui contiennent des grands outliers et la grand partie (```r nrow(distrib$texts[distrib$texts$No..hits.in.text == 0,])```, donc ca. ```r round ( (nrow(distrib$texts[distrib$texts$No..hits.in.text == 0,])*100)/nrow(distrib$texts))``` %) de textes ne contient aucune occurrence du mot. [Dans les volumes elle parait plutot stable]
+
+####Distribution
+
+La distribution des frequences dans les textes est donc right-skewed:
+
+```{r echo=FALSE}
+par(mfrow=c(1,3))
+plot( density(distrib$vols$HitsToWords), main = '')
+plot(x=distrib$vols$HitsToWords,y=seq(1,length(distrib$vols$HitsToWords)) )
+barplot(distrib$vols$HitsToWords)
+title(sub="volumes")
+plot( density(distrib$texts$HitsToWords), main = '' )
+title(sub="textes (tous)")
+plot( density(distrib$texts$HitsToWords[distrib$texts$HitsToWords > 0]), main = '' )
+title(sub="textes (avec > 0 hits)")
+mtext(text = "Distribution des frequences PM",side=3, line=-2, outer = T, cex=1.2)
+```
+
+####Rankings des textes et volumes
+
+Des volumes avec:
+
+* la plus grande frequence du mot
+```{r echo=F}
+distrib$vols$Volume[order( distrib$vols$Frequency
+)][length(distrib$vols$Frequency):(length(distrib$vols$Frequency)-10)]
+```
+
+* la plus petite frequence du mot
+```{r echo=F}
+distrib$vols$Volume[order( distrib$vols$Frequency )][1:10]
+```
+
+Des textes avec:
+
+* la plus grande frequence du mot
+```{r echo=FALSE, results="asis"}
+print( xtable (distrib$texts[order( distrib$texts$Freq..per.million.words
+),c("auteur","titre","Freq..per.million.words")][length(distrib$texts$Freq..per.million.words):(length(distrib$texts$Freq..per.million.words)-10),] ), type = "html" )
+```
+
+* la plus petite frequence du mot
+```{r echo=F, results="asis"}
+print( xtable (distrib$texts[order( distrib$texts$Freq..per.million.words ),c("auteur","titre","Freq..per.million.words")][1:10,] ), type = "html" )
+```
+
+* la plus petite frequence du mot (freq > 0)
+```{r echo=F, results="asis"}
+
+print( xtable (distrib$texts[distrib$texts$Freq..per.million.words > 0,][order( distrib$texts[distrib$texts$Freq..per.million.words > 0,]$Freq..per.million.words ),c("auteur","titre","Freq..per.million.words")][1:10,] ), type = "html" )
+```
+
+* par l'auteur
+```{r echo=F, results="asis"}
+#Calculons les statistiques agglomeratives pour chaque auteur
+auteurs_hits <- aggregate (distrib$texts$No..hits.in.text,list(distrib$texts$auteur),sum )
+auteurs_tokens <- aggregate (distrib$texts$No..words.in.text,list(distrib$texts$auteur),sum )
+auteurs_oeuvres <- aggregate (distrib$texts$titre,list(distrib$texts$auteur),function(x) paste (x, collapse = ", ") )
+auteurs <- merge(merge(auteurs_hits,auteurs_oeuvres, by = "Group.1" ),auteurs_tokens, by = "Group.1")
+names(auteurs) <- c("auteur","hits","titres","tokens")
+auteurs$PM <- round((auteurs$hits/auteurs$tokens)*1000000,0)
+auteurs <- auteurs[order(auteurs$PM, decreasing = T),]
+```
+  
+  + les auteurs avec le plus de mots PM
+```{r results="asis"}
+print( xtable ( auteurs[1:10,] ), type = "html", col="blue" )
+```
+  
+  + les auteurs avec le plus de mots PM (freq > 20)
+```{r results="asis"}
+print( xtable ( auteurs[auteurs$hits > 20,][1:10,] ), type = "html", col="blue" )
+``` 
+  
+  + les auteurs avec le moins de mots PM
+```{r results="asis"}
+  print( xtable ( auteurs[(nrow(auteurs)-10):nrow(auteurs),]  ), type = "html", col="red" )
+```
+
+* par titre
+```{r echo=FALSE, warning=F}
+how_much <- 100
+titles_max <- distrib$texts[order(distrib$texts$Freq..per.million.words,decreasing = T),][1:how_much,"titre"] # Factor with titles of works which contain most hits per million
+titles_max_tokens <- sapply(as.character (titles_max), strsplit,split=" ") %>% unlist(.) %>% sapply(.,tolower) %>% gsub("[.,]","",.)
+titles_max_rank <- as.data.frame(table(titles_max_tokens)) %>% .[order(.[2],decreasing = T),]
+
+stopWords <- c("ad", "de", "in", "s", "liber", "et", "super", "adversus", "contra","versus")
+titles_max_rank_noStop <- subset(titles_max_rank,subset = !titles_max_rank$titles_max_tokens %in% stopWords)
+
+titles_min <- distrib$texts[order(distrib$texts$Freq..per.million.words,decreasing = F),][1:how_much,"titre"] # Factor with titles of works which contain least hits per million
+titles_min_tokens <- sapply(as.character (titles_min), strsplit,split=" ") %>% unlist(.) %>% sapply(.,tolower) %>% gsub("[.,]","",.)
+titles_min_rank <- as.data.frame(table(titles_min_tokens)) %>% .[order(.[2],decreasing = F),]
+
+par(mfrow=c(1,2))
+barplot(titles_max_rank$Freq[1:10],names.arg = titles_max_rank$titles_max_tokens[1:10])
+wordcloud(titles_max_rank$titles_max_tokens,titles_max_rank$Freq,max.words = 50,random.order = F)
+title("Les mots dans les titres des oeuvres avec le plus grande nombre d'occurrences du mot")
+
+par(mfrow=c(1,2))
+barplot(titles_max_rank_noStop$Freq[1:10],names.arg = titles_max_rank_noStop$titles_max_tokens[1:10])
+wordcloud(titles_max_rank_noStop$titles_max_tokens,titles_max_rank_noStop$Freq,max.words = 20,random.order = F)
+title("Les mots dans les titres des oeuvres avec le plus grande nombre d'occurrences du mot", sub="sans les stop words")
+
+par(mfrow=c(1,2))
+plot(titles_min_rank$Freq[1:10],pch="")
+text(x=1:10,y=1,labels = as.character(titles_min_rank[1:10,]$titles_min_tokens), srt=270)
+wordcloud(titles_min_rank$titles_min_tokens[1:30],titles_min_rank$Freq[1:30],max.words = 30,random.color = T,random.order = F)
+title("Les mots dans les titres des oeuvres avec le moins grande nombre d'occurrences du mot")
+#text(titles_min_rank$titles_min_tokens[1:10])
+```
+#Collocations
+```{r echo=FALSE, warning=F, message=F}
+col_w_dice <- read.csv("raw_real/subc_word_Dice.csv",header = T, sep="\t")
+col_l_dice <- read.csv("raw_real/subc_lemma_Dice.csv",header = T, sep="\t")
+```
+##Wordcloud des co-occurrences (Dice)
+###Mots
+```{r echo=F, warning=F, message=F}
+wordcloud(col_w_dice$Word,col_w_dice$Dice.coefficient.value, max.words = 100)
+```
+
+###Lemmes
+```{r echo=F, warning=F, message=F}
+wordcloud(col_l_dice$lemma,col_l_dice$Dice.coefficient.value, max.words = 100)
+```
+
+#Clustering de cooccurrences
+1. La methode: semantique distributionelle
+Evert 2014: "Distributional semantic models (DSMs) represent the meaning of a target term (which can be a word form, lemma, morpheme, word pair, etc.) in the form of a feature vector that records either co-occurrence frequencies of the target term with a set of feature terms (term-term model) or its distribution across text units (term-context model)"
+
+2. L'outil: pacquet R wordspace
+Evert, Stefan. „Distributional Semantics in R with the wordspace Package.” W Proceedings of COLING 2014, the 25th International Conference on Computational Linguistics: System Demonstrations, 110–14. Dublin, Ireland: Dublin City University and Association for Computational Linguistics, 2014. http://anthology.aclweb.org/C/C14/C14-2024.pdf.
+
+3. Session
+```{r}
+library(wordspace)
+```
+### Read-in data  
+The data should come in the following format:
+
+target term | feature term | frequency
+-----------|--------------|----------
+liber1_SUB |quintus_QLF   |153
+liber1_SUB |lego1_VBE     |6988
+
+```{r echo=FALSE}
+# Only lemmas
+# Triples_lemmes <- read.csv("~/Kod/Rworkspace/projects/colloc/data/patrologia_bb.carol_lemmas.tbl",sep = "\t",header = F)
+#colnames(Triples_lemmes) <- c("freq","lemme1","lemme2")
+
+# Only words
+# Triples_words <- read.csv("~/Kod/Rworkspace/projects/colloc/data/patrologia_bb.carol_word.tbl",sep = "\t",header = F)
+#colnames(Triples_words) <- c("freq","word1","word2")
+
+# Lemmes and pos
+Triples_lemmes_pos_tmp <- read.csv("~/Kod/Rworkspace/projects/colloc/data/patrologia_bb.carol_lemmas_pos.tbl",sep = "\t",header = F)
+Triples_lemmes_pos <- data.frame(
+  freq=Triples_lemmes_pos_tmp[,1],
+  lemme1=do.call(paste,list(Triples_lemmes_pos_tmp[,2],Triples_lemmes_pos_tmp[,3],sep = "_")),
+  lemme2=do.call(paste,list(Triples_lemmes_pos_tmp[,4],Triples_lemmes_pos_tmp[,5],sep = "_"))
+)
+# Words and pos
+#Triples_words_pos_tmp <- read.csv("~/Kod/Rworkspace/projects/colloc/data/patrologia_bb.carol_words_pos.tbl",sep = "\t",header = F)
+#Triples_words_pos <- data.frame(freq=Triples_words_pos_tmp[,1],   lemme1=do.call(paste,list(Triples_words_pos_tmp[,2],Triples_words_pos_tmp[,3],sep = "_")),   lemme2=do.call(paste,list(Triples_words_pos_tmp[,4],Triples_words_pos_tmp[,5],sep = "_")) )
+```
+
+### Creation de modeles
+```{r echo=FALSE}
+#VObj_lemmes <- dsm(target =Triples_lemmes$lemme1 ,feature = Triples_lemmes$lemme2, score = Triples_lemmes$freq,raw.freq=TRUE, sort=TRUE)
+#VObj_words <- dsm(target =Triples_words$word1 ,feature = Triples_words$word2, score = Triples_words$freq,raw.freq=TRUE, sort=TRUE)
+VObj_lemmes_pos <- dsm(target =Triples_lemmes_pos$lemme1 ,feature = Triples_lemmes_pos$lemme2, score = Triples_lemmes_pos$freq,raw.freq=TRUE, sort=TRUE)
+#VObj_words_pos <- dsm(target =Triples_words_pos$lemme1 ,feature = Triples_words_pos$lemme2, score = Triples_words_pos$freq,raw.freq=TRUE, sort=TRUE)
+
+#dim(VObj_lemmes)
+#dim(VObj_words)
+dim(VObj_lemmes_pos)
+#dim(VObj_words_pos)
+
+```
+
+###On limite la matrix au mots qui ont au moins 3 nonzero frequences
+```{r echo=FALSE}
+#VObj_lemmes <- subset(VObj_lemmes, nnzero >= 3, nnzero >= 3, recursive=TRUE)
+#VObj_words <- subset(VObj_words, nnzero >= 3, nnzero >= 3, recursive=TRUE)
+VObj_lemmes_pos <- subset(VObj_lemmes_pos, nnzero >= 3, nnzero >= 3, recursive=TRUE)
+#VObj_words_pos <- subset(VObj_words_pos, nnzero >= 3, nnzero >= 3, recursive=TRUE)
+```
+
+### Weighting counts by log-likelikood
+> Evert 2014: "Co-occurrence counts are then weighted by the log-likelihood association measure, log-transformed to deskew their distribution, and row vectors are normalized to Euclidean unit length"
+
+```{r echo=FALSE}
+#VObj_lemmes <- dsm.score(VObj_lemmes, score="simple-ll", transform="log", normalize=TRUE)
+#VObj_words <- dsm.score(VObj_words, score="simple-ll", transform="log", normalize=TRUE)
+VObj_lemmes_pos <- dsm.score(VObj_lemmes_pos, score="simple-ll", transform="log", normalize=TRUE)
+#VObj_words_pos <- dsm.score(VObj_words_pos, score="simple-ll", transform="log", normalize=TRUE)
+```
+
+### Dimensionality reduction with SVD algorithm
+```{r echo=FALSE, message=FALSE, warning=FALSE, echo=FALSE}
+#VObj300_lemmes <- dsm.projection(VObj_lemmes, method="rsvd", n=300, oversampling=4)
+#VObj300_words <- dsm.projection(VObj_words, method="rsvd", n=300, oversampling=4)
+
+if (live) {
+  VObj300_lemmes_pos <- dsm.projection(VObj_lemmes_pos, method="rsvd", n=300, oversampling=4)
+} else {
+  load(file = "VObj300_lemmes_pos_reading")
+  VObj300_lemmes_pos <- VObj300_lemmes_pos_reading
+  rm(VObj300_lemmes_pos_reading)
+}
+
+#VObj300_words_pos <- dsm.projection(VObj_words_pos, method="rsvd", n=300, oversampling=4)
+```
+
+### Usage du modele: trouver des mots synonymes
+```{r echo=FALSE}
+nn_l_p <- nearest.neighbours(VObj300_lemmes_pos, "liber1_SUB", n=15, dist.matrix = T)
+
+plot(nn_l_p) #Plot the list
+```
+
+### Usage du modele: clustering de collocations
+
+1. Read-in the collocations
+```{r echo=FALSE}
+collocs <- c("scribo1","lego2","secundus","primus","item","de","idem2","tertius","capitulum","quinque","in","rex","historia","quartus","numerus","beatus","caput","incipio","quattuor","moralis","genesis","decimus","-","1","ecclesiasticus1","euangelium","quintus","diuinus1","trinitas","ex","septimus1","lex","sapientia","iudex","liber1","aperio","contineo","unus","ambrosius","sanctus1","predestinatio",":","finis","deleo","contra2","propheta","sicut","prefatio","duo","exodium")
+collocs_exp <- sapply(collocs,function(x) paste(rownames(VObj300_lemmes_pos)[grep(paste("^",x,"_", sep=""),rownames(VObj300_lemmes_pos))])) # Add pos label
+nn_l_p.terms <- c("liber1_SUB", collocs_exp[-which(collocs_exp == "liber1_SUB")]) # Add the node word to the list
+```
+
+2. Calcule les coefficients de la similarite entre chaque collocation.
+
+Le choix de la methode du calcul de distances: manhattan, mais cp.
+> the Euclidean and Manhattan distance metrics ... turn out to be especially sensitive to extreme values (Juraffsky, Martin 698) 
+
+```{r echo=F}
+nn_l_p.dist <- dist.matrix(VObj300_lemmes_pos, terms=nn_l_p.terms,method="manhattan")
+library(MASS)
+mds <- isoMDS(nn_l_p.dist, p=2)
+```
+
+3. Plot tous les coefficients
+```{r echo=FALSE}
+pos <- sapply(dimnames(mds$points)[[1]],function(x) gsub(pattern = ".+_","",x))
+pos_fac <- as.factor(pos) #Pos jako faktor służący nadaniu kolorów
+plot(mds$points,pch=19, col=pos_fac)
+text(mds$points, labels=names(nn_l_p.terms), pos=3,cex = 1.8)
+legend(x="topright", legend = levels(pos_fac), col=pos_fac, pch=19)
+```
+
+4. Plot uniquement SUB
+```{r echo=FALSE}
+plot(mds$points[grep("_SUB",dimnames(mds$points)[[1]])],pch=20, col="red")
+text(mds$points[grep("_SUB",dimnames(mds$points)[[1]])], labels=names(nn_l_p.terms[grep("_SUB",nn_l_p.terms)]), pos=3, cex = 2)
+```
+
+
+#Fake collocs distance
+plot(x = c(2,4,8,10),y=c(10,12,6,4),xlim = c(0,13), ylim=c(0,20),pch=NA)
+text(x = c(2,4,8,10),y=c(10,12,6,4),labels = rownames(collocs),cex=2, pos=3)
+arrows(x0 = c(0,0,0,0),y0=c(0,0,0,0),x1 = c(2,4,8,10),y1=c(10,12,6,4),col=c('green',"blue","red","orange"), lwd=2)
+lines(x = c(2,4),y=c(10,12),lty=2,lwd=2 )
+lines(x = c(8,10),y=c(6,4), lty=2,lwd=2 )

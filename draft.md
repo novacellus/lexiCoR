@@ -1,0 +1,1 @@
+/home/krzys/Dokumenty/Progres/projekty/liber/draft.md
