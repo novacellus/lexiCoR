@@ -47,3 +47,4 @@ node_stats <- function() {
   return(list(freq_raw=freq_raw,freq_rel=freq_rel,freq1000=freq1000,freq1000000=freq1000000))
 }
 node_stats()
+
