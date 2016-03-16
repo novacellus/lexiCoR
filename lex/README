@@ -1,0 +1,12 @@
+server.R
+- logika aplikacji
+ui.R
+- interfejs
+global.R
+- opcje dostępne dla wszystkich
+
+observe()
+reactive()
+- zwraca wartość po zmianie zmiennej
+- tu definiować zmienne w ciele funkcji, np. var <- reactive ({jakieś obliczenia zależne np. od input})
+- dostęp do zdefiniowanej dynamicznej wartości jako var(); kontekst -reaktywny, więc: observe({var()})

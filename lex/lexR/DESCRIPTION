@@ -1,0 +1,19 @@
+Package: lexR
+Title: Lexical Statistics based on rcqp
+Version: 0.0.0.9000
+Authors@R: person("First", "Last", email = "first.last@example.com", role = c("aut", "cre"))
+Description: What the package does (one paragraph).
+Depends:
+    R (>= 3.2.2),
+    magrittr,
+    dplyr,
+    tidyr,
+    corrplot,
+    ggplot2
+Imports:
+    rcqp
+License: What license is it under?
+LazyData: true
+Suggests:
+    testthat
+RoxygenNote: 5.0.1
