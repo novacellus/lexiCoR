@@ -57,7 +57,9 @@ shinyUI(fluidPage(
                  plotOutput("scatt_scatt1"), plotOutput("scatt_scatt2"),
                  plotOutput("ecdf"), plotOutput("boxpl"),
                  plotOutput("corrpl"), plotOutput("meta") ),
-        tabPanel("Collocations", value = "colls", tableOutput("tab1"))
+        tabPanel("Collocations", value = "colls",
+                 tableOutput("tab1"),
+                 tableOutput("colloc_table"))
       )
     )
   )

@@ -53,7 +53,7 @@ forms_stats <- function (string, corp_pos, corp_size) {
   
   forms_cpos_sum <- select(forms_cpos, form, cposbin)  %>%
     group_by(., cposbin)  %>%
-    dplyr::summarise(., count = n())
+    summarise(., count = n())
   
   return(list(forms_cpos = forms_cpos,
               forms_cpos_sum = forms_cpos_sum))

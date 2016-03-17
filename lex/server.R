@@ -163,5 +163,15 @@ output$corpus_plot_log <- renderPlot(
   plot_corpus_rank_log(rank_table = ranking, node[["id"]], string=input$query)
 )
 
+# Collocations
+
+colloc_table <- reactive(
+  create_colloc_tbl(node[["corpPos"]], window = 5) # Activate collocation table
+)
+
+output$colloc_table <- renderTable(
+  colloc_table()$colloc_pos[1:10,]
+)
+
 
 })

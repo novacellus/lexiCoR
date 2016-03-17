@@ -29,3 +29,14 @@ find_word_pos <-function(corpus, attr="lemma", what.id){
   dump_node <-rcqp::cqi_id2cpos(attribute = corpus.attr, id = what.id)
   return(dump_node)
 }
+
+
+#' Retrieve corpus strings for provided ids (wrapper)
+#' @param ids Vector of ids
+#' @param corpus Corpus name
+#' @param attr Strings to retrieve
+find_ids2strings <- function(ids, corpus, attr = "lemma") {
+ corpus.attr <- corpus_string(corpus, attr = attr)
+ strings <- rcqp::cqi_id2str(attribute = corpus.attr, as.vector(ids))
+ return(strings)
+}
