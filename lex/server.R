@@ -173,5 +173,18 @@ output$colloc_table <- renderTable(
   colloc_table()$colloc_pos[1:10,]
 )
 
+colloc_list <- reactive(
+  create_colloc_list(colloc_ids_tbl = colloc_table()[["colloc_ids"]], corpus = query[["corpus"]], attr = "lemma")
+)
+
+#Table of most frequent
+colloc_most <- reactive(
+  lapply(unlist(colloc_list(), recursive = F), function(df) df[1:20,"str"]) %>% 
+  as.data.frame(.)
+)
+ output$colloc_list <- renderTable (
+   colloc_most()
+)
+
 
 })

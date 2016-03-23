@@ -59,7 +59,9 @@ shinyUI(fluidPage(
                  plotOutput("corrpl"), plotOutput("meta") ),
         tabPanel("Collocations", value = "colls",
                  tableOutput("tab1"),
-                 tableOutput("colloc_table"))
+                 tableOutput("colloc_table"),
+                 tableOutput("colloc_list")
+                 )
       )
     )
   )
