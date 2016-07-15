@@ -46,7 +46,7 @@ plot_forms_scatter <- function(forms_cpos) {
   
   forms_cpos_groupped1 <- select(forms_cpos, c(form, cposbin)) %>%
     group_by(., form, cposbin) %>%
-    summarise(., count = n())
+    summarise(., count = n() )
   
   forms_cpos_groupped <- select(forms_cpos, c(form, cposbin)) %>%
     group_by(., form, cposbin) %>%

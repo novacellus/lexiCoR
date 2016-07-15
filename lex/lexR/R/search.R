@@ -9,7 +9,7 @@
 #' find_word('PATROLOGIA', 'lemma', 'tempus')
 #' @return Numeric identifier of the searched string in the selected corpus
 #' @export
-find_word_id <- function(corpus,attr="word",what) {
+find_word_id <- function(corpus,attr="lemma",what) {
   corpus_attr <- paste(corpus, ".", attr , sep="")
   node_id <- rcqp::cqi_str2id(corpus_attr, what)
   return(node_id)
